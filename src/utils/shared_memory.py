@@ -86,6 +86,9 @@ class OrderBookSharedMemory:
             # Write to shared memory
             self.shm.buf[:self.HEADER_SIZE] = header
             self.shm.buf[self.HEADER_SIZE:self.HEADER_SIZE + len(json_bytes)] = json_bytes
+            # Clear remaining bytes to prevent stale data
+            if len(json_bytes) < self.MEMORY_SIZE - self.HEADER_SIZE:
+                self.shm.buf[self.HEADER_SIZE + len(json_bytes):self.MEMORY_SIZE] = b'\x00' * (self.MEMORY_SIZE - self.HEADER_SIZE - len(json_bytes))
     
     def read_orderbook(self) -> Optional[Dict]:
         """Read order book data from shared memory.
@@ -102,12 +105,12 @@ class OrderBookSharedMemory:
             if timestamp == 0:
                 return None
             
-            # Find end of JSON data (look for null terminator or use fixed size)
-            # We'll read until we find the end of JSON structure
+            # Read JSON data up to null terminator
+            # We search for null bytes to determine the actual JSON data length
             max_json_size = self.MEMORY_SIZE - self.HEADER_SIZE
             json_bytes = bytes(self.shm.buf[self.HEADER_SIZE:self.HEADER_SIZE + max_json_size])
             
-            # Find the actual end of JSON (first null byte)
+            # Find the actual end of JSON data (first null byte indicates end)
             try:
                 null_index = json_bytes.index(b'\x00')
                 json_bytes = json_bytes[:null_index]
